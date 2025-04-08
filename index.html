@@ -3,6 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <title>QR 멤버십 포인트 관리</title>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database-compat.js"></script>
   <style>
     body { font-family: Arial, sans-serif; padding: 30px; }
     label, input, button { font-size: 16px; margin: 5px 0; display: block; }
@@ -15,7 +18,7 @@
   <div id="login-section">
     <label>이름 (별칭): <input type="text" id="name" required></label>
     <label>전화번호: <input type="text" id="phone" required></label>
-    <button onclick="generateQR()">QR 생성하기</button>
+    <button onclick="loginUser()">QR 생성 및 로그인</button>
   </div>
 
   <div id="qr-section" style="display:none;">
@@ -32,14 +35,33 @@
     <button onclick="deduct()">차감</button>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
   <script>
-    let currentUserId = '';
-    let userPoints = {}; // 임시 메모리 저장 (Firebase 연결 가능)
+    // const firebaseConfig = {
+  apiKey: "당신의 키",
+  authDomain: "xxxx.firebaseapp.com",
+  databaseURL: "https://xxxx.firebaseio.com", // 꼭 포함!
+  ...
+};
 
-    function generateQR() {
-      const name = document.getElementById('name').value;
-      const phone = document.getElementById('phone').value;
+    const firebaseConfig = {
+      apiKey: "YOUR_API_KEY",
+      authDomain: "YOUR_AUTH_DOMAIN",
+      databaseURL: "YOUR_DATABASE_URL",
+      projectId: "YOUR_PROJECT_ID",
+      storageBucket: "YOUR_STORAGE_BUCKET",
+      messagingSenderId: "YOUR_SENDER_ID",
+      appId: "YOUR_APP_ID"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    let currentUserId = '';
+    let currentBalance = 0;
+
+    function loginUser() {
+      const name = document.getElementById('name').value.trim();
+      const phone = document.getElementById('phone').value.trim();
       if (!name || !phone) return alert("모든 정보를 입력해주세요.");
 
       currentUserId = `USER-${phone}`;
@@ -47,32 +69,40 @@
 
       QRCode.toCanvas(document.getElementById('canvas'), currentUserId, function (error) {
         if (error) console.error(error);
-        console.log('QR 생성 완료:', currentUserId);
         document.getElementById('qr-section').style.display = 'block';
         document.getElementById('action-section').style.display = 'block';
+      });
 
-        if (!userPoints[currentUserId]) userPoints[currentUserId] = 0;
+      // 🔄 사용자 포인트 불러오기
+      db.ref(`users/${currentUserId}/balance`).once('value').then(snapshot => {
+        currentBalance = snapshot.val() || 0;
         updateBalance();
       });
     }
 
     function updateBalance() {
-      document.getElementById('balance').innerHTML = `현재 잔액: <strong>${userPoints[currentUserId]}원</strong>`;
+      document.getElementById('balance').innerHTML = `현재 잔액: <strong>${currentBalance}원</strong>`;
     }
 
     function charge() {
       const amt = parseInt(document.getElementById('amount').value);
       if (isNaN(amt) || amt <= 0) return alert("유효한 금액을 입력하세요.");
-      userPoints[currentUserId] += amt;
-      updateBalance();
+      currentBalance += amt;
+      saveBalance();
     }
 
     function deduct() {
       const amt = parseInt(document.getElementById('amount').value);
       if (isNaN(amt) || amt <= 0) return alert("유효한 금액을 입력하세요.");
-      if (userPoints[currentUserId] < amt) return alert("잔액이 부족합니다.");
-      userPoints[currentUserId] -= amt;
-      updateBalance();
+      if (currentBalance < amt) return alert("잔액이 부족합니다.");
+      currentBalance -= amt;
+      saveBalance();
+    }
+
+    function saveBalance() {
+      db.ref(`users/${currentUserId}`).set({ balance: currentBalance })
+        .then(() => updateBalance())
+        .catch(err => alert("저장 오류: " + err));
     }
   </script>
 </body>
